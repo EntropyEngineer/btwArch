@@ -276,8 +276,16 @@ creating_partitions() {
 # ------------------------------------------------------
 
 setting_filesystems() {
-    mkfs.fat -F32 "${TARGET_DISK}1"
-    mkfs.btrfs -f "${TARGET_DISK}2"
+    if [[ $(basename "${TARGET_DISK}") =~ ^nvme ]]; then
+        PARTITION1="${TARGET_DISK}p1"
+        PARTITION2="${TARGET_DISK}p2"
+    else
+        PARTITION1="${TARGET_DISK}1"
+        PARTITION2="${TARGET_DISK}2"
+    fi
+
+    mkfs.fat -F32 "$PARTITION1"
+    mkfs.btrfs -f "$PARTITION2"
 }
 
 # ------------------------------------------------------
@@ -285,7 +293,7 @@ setting_filesystems() {
 # ------------------------------------------------------
 
 creating_btrfs_volumes() {
-    mount "${TARGET_DISK}2" /mnt
+    mount $PARTITION2 /mnt
 
     btrfs sub cr /mnt/@
     btrfs sub cr /mnt/@home
@@ -305,7 +313,7 @@ creating_btrfs_volumes() {
 # ------------------------------------------------------
 
 mounting_partitions() {
-    local root_part="${TARGET_DISK}2"
+    local root_part=$PARTITION2
     local mount_options="noatime,nodiratime,compress=lzo,space_cache=v2,ssd"
 
     mount -o $mount_options,subvol=@ $root_part /mnt
@@ -319,7 +327,7 @@ mounting_partitions() {
     mount -o x-mount.mkdir,$mount_options,subvol=@tmp $root_part /mnt/var/tmp
 
     mkdir -m 700 /mnt/efi
-    mount "${TARGET_DISK}1" /mnt/efi
+    mount $PARTITION1 /mnt/efi
 }
 
 # ------------------------------------------------------
