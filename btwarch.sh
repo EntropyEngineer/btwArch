@@ -20,7 +20,14 @@ VIDEO_DRIVER="vbox" # nvidia / vbox
 INSTALLING_SOUND_SERVER="y"
 INSTALLING_SPELL_CHECKER="y"
 INSTALLING_PRINT_SERVER="y"
-DE=""
+DE="" # kde / ""
+
+# ------------------------------------------------------
+# Флаги пересборки
+# ------------------------------------------------------
+
+UPDATE_GRUB=false
+UPDATE_MKINITCPIO=false
 
 # ------------------------------------------------------
 # Первый этап установки
@@ -366,7 +373,7 @@ launch_archroot() {
 # ------------------------------------------------------
 
 installing_bootloader() {
-    pacman -Syu --noconfirm grub efibootmgr grub-btrfs os-prober
+    pacman -S --noconfirm grub efibootmgr grub-btrfs os-prober
     grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=Arch
     grub-mkconfig -o /boot/grub/grub.cfg
 }
@@ -501,7 +508,7 @@ setting_pacman() {
 # ------------------------------------------------------
 
 setting_reflector() {
-    pacman -Syu --noconfirm reflector rsync
+    pacman -S --noconfirm reflector rsync
     reflector --verbose --country $REFLECTOR_COUNTRY -l 20 --sort rate --save /etc/pacman.d/mirrorlist
 }
 
@@ -510,7 +517,7 @@ setting_reflector() {
 # ------------------------------------------------------
 
 installing_yay() {
-    pacman -Syu --noconfirm base-devel git go
+    pacman -S --noconfirm base-devel git go
 
     run_as_user "cd /var/tmp && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm"
 
@@ -524,7 +531,7 @@ installing_yay() {
 installing_zram() {
     sh -c "echo 0 > /sys/module/zswap/parameters/enabled"
     modprobe zram
-    run_as_user "yay -Syu --noconfirm zram-generator"
+    run_as_user "yay -S --noconfirm zram-generator"
 
     local zram_config="/etc/systemd/zram-generator.conf"
 
@@ -537,7 +544,7 @@ installing_zram() {
     systemctl start systemd-zram-setup@zram0
 
     sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/GRUB_CMDLINE_LINUX_DEFAULT="zswap.enabled=0 /' /etc/default/grub
-    grub-mkconfig -o /boot/grub/grub.cfg
+    UPDATE_GRUB=true
 
     local swap_config="/etc/sysctl.d/99-swappiness.conf"
 
@@ -554,7 +561,7 @@ installing_zram() {
 # ------------------------------------------------------
 
 installing_snapper() {
-    run_as_user "yay -Syu --noconfirm snapper snap-pac snapper-rollback"
+    run_as_user "yay -S --noconfirm snapper snap-pac snapper-rollback"
 
     umount /.snapshots
     rm -r /.snapshots
@@ -579,7 +586,7 @@ installing_snapper() {
     systemctl enable --now snapper-timeline.timer
     systemctl enable --now snapper-cleanup.timer
 
-    grub-mkconfig -o /boot/grub/grub.cfg
+    UPDATE_GRUB=true
 }
 
 # ------------------------------------------------------
@@ -587,13 +594,13 @@ installing_snapper() {
 # ------------------------------------------------------
 
 installing_graphical_boot() {
-    run_as_user "yay -Syu --noconfirm plymouth"
+    run_as_user "yay -S --noconfirm plymouth"
 
     sed -i '/^HOOKS=/ s/)/ plymouth)/' /etc/mkinitcpio.conf
-    mkinitcpio -P
+    UPDATE_MKINITCPIO=true
 
     sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="/&quiet splash rd.udev.log_priority=3 vt.global_cursor_default=0 /' /etc/default/grub
-    grub-mkconfig -o /boot/grub/grub.cfg
+    UPDATE_GRUB=true
 }
 
 # ------------------------------------------------------
@@ -626,7 +633,7 @@ adding_windows_to_boot_menu() {
         sed -i '/^#GRUB_DISABLE_OS_PROBER/s/^#//' /etc/default/grub
 
         os-prober
-        grub-mkconfig -o /boot/grub/grub.cfg
+        UPDATE_GRUB=true
 
         local i=1
 
@@ -652,7 +659,7 @@ adding_windows_to_boot_menu() {
 # ------------------------------------------------------
 
 installing_nvidia() {
-    run_as_user "yay -Syu --noconfirm nvidia-open"
+    run_as_user "yay -S --noconfirm nvidia-open"
     echo "options nvidia-drm modeset=1 fbdev=1" >/etc/modprobe.d/nvidia-drm.conf
 }
 
@@ -661,7 +668,7 @@ installing_nvidia() {
 # ------------------------------------------------------
 
 installing_vbox() {
-    run_as_user "yay -Syu --noconfirm virtualbox-guest-utils"
+    run_as_user "yay -S --noconfirm virtualbox-guest-utils"
     modprobe -a vboxguest vboxsf vboxvideo
     systemctl enable vboxservice.service
 }
@@ -671,7 +678,7 @@ installing_vbox() {
 # ------------------------------------------------------
 
 installing_sound_server() {
-    run_as_user "yay -Syu --noconfirm pipewire pipewire-alsa pipewire-pulse wireplumber pipewire-jack"
+    run_as_user "yay -S --noconfirm pipewire pipewire-alsa pipewire-pulse wireplumber pipewire-jack"
 }
 
 # ------------------------------------------------------
@@ -679,7 +686,7 @@ installing_sound_server() {
 # ------------------------------------------------------
 
 installing_spell_checker() {
-    run_as_user "yay -Syu --noconfirm hunspell hunspell-ru hunspell-en"
+    run_as_user "yay -S --noconfirm hunspell hunspell-ru hunspell-en"
 }
 
 # ------------------------------------------------------
@@ -692,7 +699,7 @@ installing_spell_checker() {
 # ------------------------------------------------------
 
 installing_print_server() {
-    run_as_user "yay -Syu --noconfirm cups cups-pdf ghostscript gsfonts"
+    run_as_user "yay -S --noconfirm cups cups-pdf ghostscript gsfonts"
     systemctl enable --now cups.service
 }
 
@@ -702,12 +709,15 @@ installing_print_server() {
 
 installing_kde() {
     # Установка зависимостей
-    run_as_user "yay -Syu --noconfirm pipewire-jack ttf-joypixels qt6-multimedia-ffmpeg"
+    run_as_user "yay -S --noconfirm pipewire-jack ttf-joypixels qt6-multimedia-ffmpeg"
     # Установка окружения KDE
-    run_as_user "yay -Syu --needed --noconfirm plasma-desktop discover plasma-nm plasma-pa kdeplasma-addons kde-gtk-config breeze-gtk plasma-browser-integration kwrited plasma-systemmonitor plasma-disks kscreen"
+    run_as_user "yay -S --needed --noconfirm plasma-desktop discover plasma-nm plasma-pa kdeplasma-addons kde-gtk-config breeze-gtk plasma-browser-integration kwrited plasma-systemmonitor plasma-disks kscreen gsettings-desktop-schemas"
+
+    # Назначение темы Breeze для GTK
+    gsettings set org.gnome.desktop.interface gtk-theme Breeze
 
     # Установка менеджера входа
-    run_as_user "yay -Syu --noconfirm sddm-kcm"
+    run_as_user "yay -S --noconfirm sddm-kcm"
     systemctl enable sddm
 
     # Настройка менеджера входа на работу через Wayland
@@ -728,18 +738,18 @@ installing_kde() {
 
     # Установка темы графического загрузчика KDE plasma
     if command -v plymouth &>/dev/null; then
-        run_as_user "yay -Syu --noconfirm plymouth-kcm breeze-plymouth"
+        run_as_user "yay -S --noconfirm plymouth-kcm breeze-plymouth"
         plymouth-set-default-theme "breeze"
-        mkinitcpio -P
+        UPDATE_MKINITCPIO=true
     fi
 
     # Установка конфигуратора службы печати
     if command -v cups &>/dev/null; then
-        run_as_user "yay -Syu --noconfirm print-manager"
+        run_as_user "yay -S --noconfirm print-manager"
     fi
 
     # Установка минимального набора программ
-    run_as_user "yay -Syu --noconfirm konsole dolphin partitionmanager ark kate gwenview spectacle okular"
+    run_as_user "yay -S --noconfirm konsole dolphin partitionmanager ark kate gwenview spectacle okular"
 }
 
 # ------------------------------------------------------
@@ -747,6 +757,14 @@ installing_kde() {
 # ------------------------------------------------------
 
 installation_complete() {
+    if [ $UPDATE_GRUB = true ] ; then
+        grub-mkconfig -o /boot/grub/grub.cfg
+    fi
+
+    if [ $UPDATE_MKINITCPIO = true ] ; then
+        mkinitcpio -P
+    fi
+
     reboot
 }
 
@@ -795,7 +813,7 @@ run_as_user() {
 # ------------------------------------------------------
 
 enable_root_ssh() {
-    pacman -Syu --noconfirm openssh
+    pacman -S --noconfirm openssh
 
     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
     sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
