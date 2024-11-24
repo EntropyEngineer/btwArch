@@ -464,7 +464,7 @@ enable_network() {
 setting_timezone() {
     timedatectl set-timezone $TIMEZONE
     timedatectl set-ntp true
-    timedatectl set-local-rtc 1
+    timedatectl set-local-rtc 0
 }
 
 # ------------------------------------------------------
