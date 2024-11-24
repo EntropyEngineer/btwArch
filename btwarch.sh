@@ -645,7 +645,8 @@ adding_windows_to_boot_menu() {
         sed -i '/^#GRUB_DISABLE_OS_PROBER/s/^#//' /etc/default/grub
 
         os-prober
-        UPDATE_GRUB=true
+        grub-mkconfig -o /boot/grub/grub.cfg
+        UPDATE_GRUB=false
 
         local i=1
 
