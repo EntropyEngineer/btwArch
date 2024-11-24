@@ -749,7 +749,7 @@ installing_kde() {
     fi
 
     # Установка минимального набора программ
-    run_as_user "yay -S --noconfirm konsole dolphin partitionmanager ark kate gwenview spectacle okular"
+    run_as_user "yay -S --noconfirm konsole dolphin partitionmanager ark kate gwenview spectacle okular btrfs-assistant"
 }
 
 # ------------------------------------------------------
