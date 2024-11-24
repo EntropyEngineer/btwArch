@@ -20,7 +20,7 @@ VIDEO_DRIVER="vbox" # nvidia / vbox
 INSTALLING_SOUND_SERVER="y"
 INSTALLING_SPELL_CHECKER="y"
 INSTALLING_PRINT_SERVER="y"
-DE="" # kde / ""
+DE="kde" # kde / ""
 
 # ------------------------------------------------------
 # Флаги пересборки
@@ -34,6 +34,8 @@ UPDATE_MKINITCPIO=false
 # ------------------------------------------------------
 
 stage_1() {
+    output_to_file
+
     logo
     show_constants
     uefi_check
@@ -60,6 +62,8 @@ stage_1() {
 # ------------------------------------------------------
 
 stage_1_archroot() {
+    output_to_file
+
     installing_bootloader
     setting_root_password
 
@@ -71,6 +75,8 @@ stage_1_archroot() {
 # ------------------------------------------------------
 
 stage_2() {
+    output_to_file
+
     logo "Второй этап установки"
 
     cleaning_script_autorun
@@ -365,6 +371,8 @@ launch_archroot() {
     cp $script_path "/mnt$stage_2_path"
     chmod +x "/mnt$stage_2_path"
 
+    mv "/var/tmp/btwarch.log" "/mnt/var/tmp/btwarch.log"
+
     arch-chroot /mnt $stage_2_path stage_1_archroot
 }
 
@@ -391,6 +399,8 @@ setting_root_password() {
 # ------------------------------------------------------
 
 ending_archroot() {
+    mv "/mnt/var/tmp/btwarch.log" "/var/tmp/btwarch.log"
+
     echo
     print question line "Установка продолжится после перезагрузки и входа в систему пользователем root (Enter)"
     read -rp "" input
@@ -404,6 +414,8 @@ ending_archroot() {
     if ! grep -q "$stage_2_path $stage_param" /mnt/root/.bash_profile; then
         echo "$stage_2_path $stage_param && sed -i '/$stage_2_path $stage_param/d' /mnt/root/.bash_profile" >>/mnt/root/.bash_profile
     fi
+
+    mv "/var/tmp/btwarch.log" "/mnt/var/tmp/btwarch.log"
 
     umount -R /mnt
     reboot
@@ -795,6 +807,14 @@ print() {
     else
         echo -e "${color}${text}\e[0m"
     fi
+}
+
+# ------------------------------------------------------
+# Сохранение вывода в файл
+# ------------------------------------------------------
+
+output_to_file() {
+    exec > >(tee -a /var/tmp/btwarch.log) 2>&1
 }
 
 # ------------------------------------------------------
