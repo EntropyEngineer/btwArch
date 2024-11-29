@@ -699,7 +699,7 @@ installing_sound_server() {
 # ------------------------------------------------------
 
 installing_spell_checker() {
-    run_as_user "yay -S --noconfirm hunspell hunspell-ru hunspell-en"
+    run_as_user "yay -S --noconfirm hunspell hunspell-ru hunspell-en hyphen hyphen-ru libmythes mythes-ru"
 }
 
 # ------------------------------------------------------
