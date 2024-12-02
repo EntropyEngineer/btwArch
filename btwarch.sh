@@ -6,6 +6,7 @@
 
 TARGET_DISK="" # Если диск не указан, появится меню выбора диска
 ADD_WINDOWS_TO_BOOT="y"
+ENABLE_MOUNT_INTERNAL="y"
 INSTALLING_GRAPHICAL_BOOT="y"
 ROOT_PASSWORD="root"
 USERNAME="test"
@@ -98,6 +99,10 @@ stage_2() {
 
     if [ "$ADD_WINDOWS_TO_BOOT" = "y" ]; then
         adding_windows_to_boot_menu
+    fi
+
+    if [ "$ENABLE_MOUNT_INTERNAL" = "y" ]; then
+        enable_mounting_internal_drives
     fi
 
     if [ "$VIDEO_DRIVER" = "nvidia" ]; then
@@ -665,6 +670,25 @@ adding_windows_to_boot_menu() {
 
         sed -i '/^GRUB_DISABLE_OS_PROBER/s/^/#/' /etc/default/grub
     fi
+}
+
+# ------------------------------------------------------
+# Включение возможности монтирования внутренних дисков
+# без ввода пароля, например NTFS
+# ------------------------------------------------------
+
+enable_mounting_internal_drives() {
+    local polkit_rule="/etc/polkit-1/rules.d/10-udisks2-internal.rules"
+
+    echo 'polkit.addRule(function(action, subject) {' >$polkit_rule
+    echo 'if ((action.id == "org.freedesktop.udisks2.filesystem-mount-system" ||' >>$polkit_rule
+    echo 'action.id == "org.freedesktop.udisks2.filesystem-mount") &&' >>$polkit_rule
+    echo 'subject.isInGroup("disk")) {' >>$polkit_rule
+    echo 'return polkit.Result.YES;' >>$polkit_rule
+    echo '}' >>$polkit_rule
+    echo '});' >>$polkit_rule
+
+    systemctl restart polkit
 }
 
 # ------------------------------------------------------
