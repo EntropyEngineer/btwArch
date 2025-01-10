@@ -5,6 +5,7 @@
 # ------------------------------------------------------
 
 TARGET_DISK="" # Если диск не указан, появится меню выбора диска
+AUTO_REBOOT="" # Перезагрузка в следующий этап установки без подтверждения
 ADD_WINDOWS_TO_BOOT="y"
 ENABLE_MOUNT_INTERNAL="y"
 INSTALLING_GRAPHICAL_BOOT="y"
@@ -21,7 +22,7 @@ VIDEO_DRIVER="vbox" # nvidia / vbox
 INSTALLING_SOUND_SERVER="y"
 INSTALLING_SPELL_CHECKER="y"
 INSTALLING_PRINT_SERVER="y"
-DE="kde" # kde / ""
+DE="kde" # kde / hyprland / ""
 
 # ------------------------------------------------------
 # Флаги пересборки
@@ -125,6 +126,8 @@ stage_2() {
 
     if [ "$DE" = "kde" ]; then
         installing_kde
+    elif [ "$DE" = "hyprland" ]; then
+        installing_hyprland
     fi
 
     installation_complete
@@ -406,9 +409,11 @@ setting_root_password() {
 ending_archroot() {
     mv "/mnt/var/tmp/btwarch.log" "/var/tmp/btwarch.log"
 
-    echo
-    print question line "Установка продолжится после перезагрузки и входа в систему пользователем root (Enter)"
-    read -rp "" input
+    if [ "$AUTO_REBOOT" != "y" ]; then
+        echo
+        print question line "Установка продолжится после перезагрузки и входа в систему пользователем root (Enter)"
+        read -rp "" input
+    fi
 
     local script_name=$(basename $0)
     local stage_2_path="/var/tmp/$script_name"
@@ -506,6 +511,8 @@ setting_locale() {
 # ------------------------------------------------------
 
 setting_pacman() {
+    pacman -Sy --noconfirm archlinux-keyring
+
     pacman-key --init
     pacman-key --populate archlinux
 
@@ -548,7 +555,7 @@ installing_yay() {
 installing_zram() {
     sh -c "echo 0 > /sys/module/zswap/parameters/enabled"
     modprobe zram
-    run_as_user "yay -S --noconfirm zram-generator"
+    yay_install "zram-generator"
 
     local zram_config="/etc/systemd/zram-generator.conf"
 
@@ -578,7 +585,7 @@ installing_zram() {
 # ------------------------------------------------------
 
 installing_snapper() {
-    run_as_user "yay -S --noconfirm snapper snap-pac snapper-rollback"
+    yay_install "snapper snap-pac snapper-rollback"
 
     umount /.snapshots
     rm -r /.snapshots
@@ -611,7 +618,7 @@ installing_snapper() {
 # ------------------------------------------------------
 
 installing_graphical_boot() {
-    run_as_user "yay -S --noconfirm plymouth"
+    yay_install "plymouth"
 
     sed -i '/^HOOKS=/ s/)/ plymouth)/' /etc/mkinitcpio.conf
     UPDATE_MKINITCPIO=true
@@ -696,7 +703,7 @@ enable_mounting_internal_drives() {
 # ------------------------------------------------------
 
 installing_nvidia() {
-    run_as_user "yay -S --noconfirm nvidia-open"
+    yay_install "nvidia-open"
     echo "options nvidia-drm modeset=1 fbdev=1" >/etc/modprobe.d/nvidia-drm.conf
 }
 
@@ -705,7 +712,7 @@ installing_nvidia() {
 # ------------------------------------------------------
 
 installing_vbox() {
-    run_as_user "yay -S --noconfirm virtualbox-guest-utils"
+    yay_install "virtualbox-guest-utils-nox"
     modprobe -a vboxguest vboxsf vboxvideo
     systemctl enable vboxservice.service
 }
@@ -715,7 +722,7 @@ installing_vbox() {
 # ------------------------------------------------------
 
 installing_sound_server() {
-    run_as_user "yay -S --noconfirm pipewire pipewire-alsa pipewire-pulse wireplumber pipewire-jack"
+    yay_install "pipewire pipewire-alsa pipewire-pulse wireplumber pipewire-jack"
 }
 
 # ------------------------------------------------------
@@ -723,7 +730,7 @@ installing_sound_server() {
 # ------------------------------------------------------
 
 installing_spell_checker() {
-    run_as_user "yay -S --noconfirm hunspell hunspell-ru hunspell-en hyphen hyphen-ru libmythes mythes-ru"
+    yay_install "hunspell hunspell-ru hunspell-en hyphen hyphen-ru libmythes mythes-ru"
 }
 
 # ------------------------------------------------------
@@ -736,25 +743,16 @@ installing_spell_checker() {
 # ------------------------------------------------------
 
 installing_print_server() {
-    run_as_user "yay -S --noconfirm cups cups-pdf ghostscript gsfonts"
+    yay_install "cups cups-pdf ghostscript gsfonts"
     systemctl enable --now cups.service
 }
 
 # ------------------------------------------------------
-# Установка окружения KDE
+# Установка менеджера входа sddm
 # ------------------------------------------------------
 
-installing_kde() {
-    # Установка зависимостей
-    run_as_user "yay -S --noconfirm pipewire-jack ttf-joypixels qt6-multimedia-ffmpeg"
-    # Установка окружения KDE
-    run_as_user "yay -S --needed --noconfirm plasma-desktop discover plasma-nm plasma-pa kdeplasma-addons kde-gtk-config breeze-gtk plasma-browser-integration kwrited plasma-systemmonitor plasma-disks kscreen gsettings-desktop-schemas"
-
-    # Назначение темы Breeze для GTK
-    gsettings set org.gnome.desktop.interface gtk-theme Breeze
-
-    # Установка менеджера входа
-    run_as_user "yay -S --noconfirm sddm-kcm"
+installing_sddm() {
+    yay_install "sddm qt6-wayland layer-shell-qt"
     systemctl enable sddm
 
     # Настройка менеджера входа на работу через Wayland
@@ -766,27 +764,123 @@ installing_kde() {
     echo "GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell" >>$sddm_config
     echo >>$sddm_config
     echo "[Wayland]" >>$sddm_config
-    echo "CompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts --inputmethod qtvirtualkeyboard" >>$sddm_config
+
+    if [ "$1" = "kde" ]; then
+        echo "CompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts --inputmethod qtvirtualkeyboard" >>$sddm_config
+    elif [ "$1" = "hyprland" ]; then
+        if [ "$VIDEO_DRIVER" = "vbox" ]; then
+            echo "CompositorCommand=export WLR_NO_HARDWARE_CURSORS=1 && export WLR_RENDERER_ALLOW_SOFTWARE=1 && Hyprland -c /opt/hypr/sddm.conf" >>$sddm_config
+        else
+            echo "CompositorCommand=Hyprland -c /opt/hypr/sddm.conf" >>$sddm_config
+        fi
+
+        # Конфигурация sddm Для Hyprland
+        mkdir -p /opt/hypr/
+        local sddm_hypr_config="/opt/hypr/sddm.conf"
+
+        echo "misc {" >$sddm_hypr_config
+        echo "  disable_hyprland_logo = true" >>$sddm_hypr_config
+        echo "  disable_splash_rendering = true" >>$sddm_hypr_config
+        echo "  force_default_wallpaper = 0" >>$sddm_hypr_config
+        echo "}" >>$sddm_hypr_config
+        echo >>$sddm_hypr_config
+        echo "windowrulev2 = float, maximize, pin, stayfocused, decorate 0, noanim, noborder, nodim, norounding, noshadow, class:^(sddm-greeter)$" >>$sddm_hypr_config
+    fi
+
     echo "" >>$sddm_config
     echo "[Theme]" >>$sddm_config
     echo "Current=breeze" >>$sddm_config
     echo "EnableAvatars=true" >>$sddm_config
     echo "DisableAvatarsThreshold=7" >>$sddm_config
+}
+
+# ------------------------------------------------------
+# Установка окружения KDE
+# ------------------------------------------------------
+
+installing_kde() {
+    # Установка зависимостей
+    yay_install "pipewire-jack ttf-joypixels qt6-multimedia-ffmpeg"
+    # Установка окружения KDE
+    yay_install "plasma-desktop discover plasma-nm plasma-pa kdeplasma-addons kde-gtk-config breeze-gtk plasma-browser-integration kwrited plasma-systemmonitor plasma-disks kscreen gsettings-desktop-schemas sddm-kcm"
+
+    # Назначение темы Breeze для GTK
+    gsettings set org.gnome.desktop.interface gtk-theme Breeze
 
     # Установка темы графического загрузчика KDE plasma
     if command -v plymouth &>/dev/null; then
-        run_as_user "yay -S --noconfirm plymouth-kcm breeze-plymouth"
+        yay_install "plymouth-kcm breeze-plymouth"
         plymouth-set-default-theme "breeze"
         UPDATE_MKINITCPIO=true
     fi
 
     # Установка конфигуратора службы печати
     if command -v cups &>/dev/null; then
-        run_as_user "yay -S --noconfirm print-manager"
+        yay_install "print-manager"
     fi
 
     # Установка минимального набора программ
-    run_as_user "yay -S --noconfirm konsole dolphin partitionmanager ark kate gwenview spectacle okular btrfs-assistant"
+    yay_install "konsole dolphin partitionmanager ark kate gwenview spectacle okular btrfs-assistant"
+
+    installing_sddm 'kde'
+}
+
+# ------------------------------------------------------
+# Установка Hyprland
+# ------------------------------------------------------
+
+installing_hyprland() {
+    yay_install "ttf-dejavu ttf-liberation noto-fonts hyprland xdg-desktop-portal-hyprland uwsm qt6ct hyprpolkitagent playerctl foot"
+
+    run_as_user "systemctl --user enable hyprpolkitagent.service"
+
+    # конфиг uwsm (Universal Wayland Session Manager)
+
+    # https://wiki.hyprland.org/Useful-Utilities/Systemd-start/
+    mkdir -p /home/$USERNAME/.config/uwsm
+
+    local uwsm_config="/home/$USERNAME/.config/uwsm/env"
+
+    echo "export GDK_BACKEND=wayland" >$uwsm_config
+    echo "export SDL_VIDEODRIVER=wayland" >>$uwsm_config
+
+    echo "export XDG_SESSION_TYPE=wayland" >>$uwsm_config
+
+    echo "export QT_AUTO_SCREEN_SCALE_FACTOR=1" >>$uwsm_config
+    echo "export QT_QPA_PLATFORM=wayland;xcb" >>$uwsm_config
+    echo "export QT_QPA_PLATFORMTHEME=qt6ct" >>$uwsm_config
+
+    if [ "$VIDEO_DRIVER" = "vbox" ]; then
+        echo "export WLR_RENDERER_ALLOW_SOFTWARE=1" >>$uwsm_config
+    else
+        echo "export LIBVA_DRIVER_NAME=nvidia" >>$uwsm_config
+        echo "export GBM_BACKEND=nvidia-drm" >>$uwsm_config
+        echo "export __GLX_VENDOR_LIBRARY_NAME=nvidia" >>$uwsm_config
+        echo "export __GL_GSYNC_ALLOWED=1" >>$uwsm_config
+        echo "export __GL_VRR_ALLOWED=0" >>$uwsm_config
+    fi
+
+    local uwsm_hyprland_config="/home/$USERNAME/.config/uwsm/env-hyprland"
+
+    echo "export XDG_CURRENT_DESKTOP=Hyprland" >$uwsm_hyprland_config
+    echo "export XDG_SESSION_DESKTOP=Hyprland" >>$uwsm_hyprland_config
+
+    chown -R $USERNAME:users /home/$USERNAME/.config/uwsm
+
+    # конфиг Hyprland
+
+    mkdir -p /home/$USERNAME/.config/hypr
+    cp /usr/share/hypr/hyprland.conf /home/$USERNAME/.config/hypr/hyprland.conf
+
+    sed -i 's/^\$terminal = .*/\$terminal = uwsm app -- foot/' /home/$USERNAME/.config/hypr/hyprland.conf
+
+    if [ "$VIDEO_DRIVER" = "vbox" ]; then
+        sed -i 's/^monitor=.*/monitor=Virtual-1,1024x768@60,0x0,1/' /home/$USERNAME/.config/hypr/hyprland.conf
+    fi
+
+    chown -R $USERNAME:users /home/$USERNAME/.config/hypr
+
+    installing_sddm 'hyprland'
 }
 
 # ------------------------------------------------------
@@ -850,6 +944,14 @@ run_as_user() {
     echo "$USERNAME ALL=(ALL) NOPASSWD: ALL" | tee /etc/sudoers.d/$USERNAME >/dev/null
     su $USERNAME -c "$1"
     rm -f /etc/sudoers.d/$USERNAME
+}
+
+# ------------------------------------------------------
+# Установка пакетов через yay
+# ------------------------------------------------------
+
+yay_install() {
+    run_as_user "yay -S --needed --noconfirm $1"
 }
 
 # ------------------------------------------------------
