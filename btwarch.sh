@@ -730,7 +730,7 @@ installing_sound_server() {
 # ------------------------------------------------------
 
 installing_spell_checker() {
-    yay_install "hunspell hunspell-ru hunspell-en hyphen hyphen-ru libmythes mythes-ru"
+    yay_install "hunspell hunspell-en_us hunspell-ru-aot hyphen hyphen-en hyphen-ru libmythes mythes-en mythes-ru"
 }
 
 # ------------------------------------------------------
