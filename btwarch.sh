@@ -446,8 +446,13 @@ cleaning_script_autorun() {
 # ------------------------------------------------------
 
 creating_user() {
-    useradd -mg users $USERNAME
-    usermod -aG power,wheel,audio,video,storage,optical,scanner,floppy,disk $USERNAME
+    useradd -mg users "$USERNAME"
+    usermod -aG power,wheel,audio,video,storage,optical,scanner,floppy,disk "$USERNAME"
+
+    if [ "$VIDEO_DRIVER" = "vbox" ]; then
+        usermod -aG vboxsf "$USERNAME"
+    fi
+
     echo "$USERNAME:$USER_PASSWORD" | chpasswd
 }
 
